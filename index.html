@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rural Skill Development - Single File</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; margin: 0; }
+      .container { max-width: 980px; margin: 0 auto; padding: 16px; }
+      .row { display: grid; grid-template-columns: 1fr; gap: 8px; }
+      @media (min-width: 640px) { .row { grid-template-columns: 1fr 180px 180px; } }
+      input, select { padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; }
+      .card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
+      .title { font-size: 22px; font-weight: 700; margin: 0 0 12px; }
+      .muted { color: #475569; font-size: 13px; }
+      .link { color: #2563eb; font-size: 14px; text-decoration: none; }
+      .link:hover { text-decoration: underline; }
+      .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+      .bar input { flex: 1; }
+      .api { font-size: 12px; color: #334155; }
+      .btn { padding: 8px 10px; border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 6px; cursor: pointer; }
+      .btn:hover { background: #f1f5f9; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="title">Rural Skill Development</h1>
+
+      <div class="bar">
+        <input id="apiBase" placeholder="API Base (e.g., https://your-backend/api/v1)" />
+        <button class="btn" id="saveApi">Use API</button>
+      </div>
+      <div class="api" id="apiNote"></div>
+
+      <div class="row" style="margin: 16px 0;">
+        <input id="q" placeholder="Search skill (e.g., C++)" />
+        <select id="free">
+          <option value="">All</option>
+          <option value="true">Free</option>
+          <option value="false">Paid</option>
+        </select>
+        <select id="lang">
+          <option value="">Any language</option>
+          <option value="English">English</option>
+          <option value="Hindi">Hindi</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 12px; display:flex; gap:8px;">
+        <button class="btn" id="searchBtn">Search Courses</button>
+        <button class="btn" id="pathsBtn">Get Learning Paths</button>
+        <button class="btn" id="jobsBtn">Find Jobs</button>
+      </div>
+
+      <div id="out"></div>
+    </div>
+
+    <script>
+      (function() {
+        const apiInput = document.getElementById('apiBase');
+        const apiNote = document.getElementById('apiNote');
+        const q = document.getElementById('q');
+        const free = document.getElementById('free');
+        const lang = document.getElementById('lang');
+        const out = document.getElementById('out');
+
+        const saved = localStorage.getItem('apiBase');
+        const urlParam = new URLSearchParams(location.search).get('api');
+        let apiBase = urlParam || saved || 'http://localhost:8000/api/v1';
+        apiInput.value = apiBase;
+        apiNote.textContent = 'Using API: ' + apiBase;
+
+        document.getElementById('saveApi').addEventListener('click', () => {
+          apiBase = apiInput.value.trim();
+          localStorage.setItem('apiBase', apiBase);
+          apiNote.textContent = 'Using API: ' + apiBase;
+        });
+
+        function el(tag, attrs, children) {
+          const e = document.createElement(tag);
+          if (attrs) Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k, v));
+          if (children) children.forEach(c => e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+          return e;
+        }
+
+        function renderCourses(list) {
+          if (!Array.isArray(list) || !list.length) return el('div', null, ['No courses found.']);
+          const ul = el('div');
+          list.forEach(c => {
+            const card = el('div', { class: 'card' }, [
+              el('div', { class: 'muted' }, [c.platform || '—']),
+              el('div', { style: 'font-weight:600;margin:6px 0;' }, [c.title || 'Untitled']),
+              el('div', { class: 'muted' }, [
+                (c.language || '—') + ' • ' + (c.level || '—') + ' • ' + (c.is_free ? 'Free' : (typeof c.price_inr === 'number' ? ('₹' + c.price_inr) : 'Paid'))
+              ]),
+              el('a', { class: 'link', href: c.url || '#', target: '_blank', rel: 'noreferrer' }, ['Open'])
+            ]);
+            ul.appendChild(card);
+          });
+          return ul;
+        }
+
+        function renderPaths(list) {
+          if (!Array.isArray(list) || !list.length) return el('div', null, ['No paths found.']);
+          const ul = el('div');
+          list.forEach(p => {
+            const card = el('div', { class: 'card' }, [
+              el('div', { style: 'font-weight:600;margin:6px 0;' }, [p.label || 'Path']),
+              el('div', { class: 'muted' }, ['Courses: ' + (Array.isArray(p.courses) ? p.courses.join(', ') : '—')])
+            ]);
+            ul.appendChild(card);
+          });
+          return ul;
+        }
+
+        function renderJobs(list) {
+          if (!Array.isArray(list) || !list.length) return el('div', null, ['No jobs found.']);
+          const ul = el('div');
+          list.forEach(j => {
+            const card = el('div', { class: 'card' }, [
+              el('div', { style: 'font-weight:600;margin:6px 0;' }, [j.title || 'Job']),
+              el('div', { class: 'muted' }, [(j.company || '—') + ' • ' + (j.location || '—')]),
+              el('a', { class: 'link', href: j.url || '#', target: '_blank', rel: 'noreferrer' }, ['View'])
+            ]);
+            ul.appendChild(card);
+          });
+          return ul;
+        }
+
+        async function safeFetch(url) {
+          try { const r = await fetch(url); return await r.json(); } catch { return []; }
+        }
+
+        document.getElementById('searchBtn').addEventListener('click', async () => {
+          const params = new URLSearchParams();
+          if (q.value) params.set('query', q.value);
+          if (free.value) params.set('is_free', free.value);
+          if (lang.value) params.set('language', lang.value);
+          const data = await safeFetch(apiBase + '/courses/search?' + params.toString());
+          out.innerHTML = '';
+          out.appendChild(renderCourses(data));
+        });
+
+        document.getElementById('pathsBtn').addEventListener('click', async () => {
+          const skill = q.value || 'C++';
+          const data = await safeFetch(apiBase + '/recommendations/learning-paths?skill=' + encodeURIComponent(skill));
+          out.innerHTML = '';
+          out.appendChild(renderPaths(data));
+        });
+
+        document.getElementById('jobsBtn').addEventListener('click', async () => {
+          const skill = q.value || 'C++';
+          const data = await safeFetch(apiBase + '/jobs/search?skill=' + encodeURIComponent(skill));
+          out.innerHTML = '';
+          out.appendChild(renderJobs(data));
+        });
+
+        // Initial load
+        document.getElementById('searchBtn').click();
+      })();
+    </script>
+  </body>
+  </html>
+
+
